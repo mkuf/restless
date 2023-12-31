@@ -2,9 +2,7 @@
 
 import os
 import sys
-import json
 import yaml
-import restic
 import logging
 import apprise
 import optparse
@@ -41,33 +39,67 @@ ch.setFormatter(formatter)
 logger.addHandler(fh)
 logger.addHandler(ch)
 
+def runProcess(cmd):
+  process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+  stdout, stderr = process.communicate()
+
+  logger.debug( "cmd:\n+ " + cmd )
+  logger.debug( "out:\n" + stdout.decode('utf-8') )
+
+  if process.returncode != 0:
+    logger.error(f"Failure during {cmd} :\n{stdout.decode('utf-8')}")
+    raise Exception(stdout.decode('utf-8'))
+
 def runScript(backup,stage):
   try:
     cmd = cfg["backups"][backup]["scripts"][stage]
     try:
       logger.info("Running " + stage + " script for " + backup)
-      logger.debug(cmd)
-      subprocess.run(cmd, shell=True, check=True)
+      runProcess(cmd)
     except:
-      logger.error(stage + " Script for " + backup + " failed.")
       notifications.notify(title="restless: error", body=stage + " Script for " + backup + " failed.")
       sys.exit(1)
   except KeyError:
     logger.debug("No " + stage + " script set for " + backup)
 
-def exportResticVars(repo):
-  for key,value in cfg["repos"][repo]["vars"].items():
-    logger.debug(key + "=" + value)
-    os.environ[key]=value
+class restic():
+  def export(repo):
+    for key,value in cfg["repos"][repo]["vars"].items():
+      logger.debug(key + "=" + value)
+      os.environ[key]=value
 
-def resticInit():
-  try:
-    restic.init()
-  except restic.errors.ResticFailedError as e:
-    if not str("already exists") in str(e):
-      logger.critical("Failure during restic init")
-      notifications.notify(title="restless: critical error", body="Restic Init failed: " + str(e) )
-      raise e
+  def init():
+    try:
+      runProcess("restic init")
+    except Exception as e:
+      if not str("already exists") in str(e):
+        notifications.notify(title="restless: error during init", body=str(e))
+        raise e
+  
+  def backup(backupname):
+    cmd = [ "restic", "backup" ] 
+    cmd.extend(cfg["backups"][backupname]["include"])
+    cmd.extend(["--tag", "restless/" + args[0]])
+    for exclude in cfg["backups"][backupname]["exclude"]:
+      cmd.extend(["--exclude", exclude])
+
+    try:
+      runProcess(' '.join(cmd))
+    except Exception as e:
+      notifications.notify(title="restless: error during backup", body=str(e))
+      sys.exit(1)
+
+  def forget(backupname):
+    cmd = ["restic", "forget"]
+    cmd.extend(cfg["backups"][args[0]]["retention"])
+    cmd.extend(["--tag", "restless/" + args[0]])
+    cmd.extend(["--group-by", "host"])
+
+    try:
+      runProcess(' '.join(cmd))
+    except Exception as e:
+      notifications.notify(title="restless: error during forget", body=str(e))
+      sys.exit(1)
 
 ###
 ### main
@@ -75,40 +107,12 @@ match options.mode:
   case "backup":
     logger.info('Starting Backup')
 
-    # Run pre script
-    runScript(backup=args[0],stage="pre")
-
     # Export variables and run init
-    exportResticVars(cfg["backups"][args[0]]["repo"])
-    resticInit()
-
-    # Run backup and notify on error
-    try:
-      bkp = restic.backup(
-        tags=[str("restless/" + args[0])],
-        paths=cfg["backups"][args[0]]["include"],
-        exclude_patterns=cfg["backups"][args[0]]["exclude"]
-      )
-      logger.info(json.dumps(bkp))
-    except Exception as e:
-      logger.critical("Backup failed: " + str(e) )
-      notifications.notify(title="restless: backup " + args[0] + " failed",body=str(e))
-      sys.exit(1)
-
-    # Run prune and notify on error
-    try:
-      forget = restic.forget(
-        group_by="host",
-        tags=[str("restless/" + args[0])],
-        keep_last=cfg["backups"][args[0]]["keep"]
-      )
-      logger.info(json.dumps(forget))
-    except Exception as e:
-      logger.critical("Forget failed: " + str(e) )
-      notifications.notify(title="restless: forget for " + args[0] + " failed",body=str(e))
-      sys.exit(1)
-
-    # Run post script
+    restic.export(cfg["backups"][args[0]]["repo"])
+    restic.init()
+    runScript(backup=args[0],stage="pre")
+    restic.backup(args[0])
+    restic.forget(args[0])
     runScript(backup=args[0],stage="post")
 
   case "replica":
