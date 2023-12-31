@@ -41,7 +41,7 @@ logger.addHandler(ch)
 
 class run():
   def normal(cmd):
-    logger.debug( "running command:\n +" + cmd )
+    logger.debug( "running command:\n+ " + cmd )
 
     process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout, stderr = process.communicate()
@@ -69,33 +69,45 @@ class restic():
       logger.debug(key + "=" + value)
       os.environ[key]=value
 
-  def init():
+  def init(repo,password):
     try:
-      run.normal("restic init")
+      cmd = ["restic", "init"]
+      cmd.extend(["--repo", repo])
+
+      os.environ["RESTIC_PASSWORD"] = password
+      run.normal(' '.join(cmd))
+      del os.environ["RESTIC_PASSWORD"]
+
     except Exception as e:
       if not str("already exists") in str(e):
         notifications.notify(title="restless: error during init", body=str(e))
         sys.exit(1)
         raise e
 
-  def backup(tags,includes,excludes):
+  def backup(repo,password,tags,includes,excludes):
     cmd = [ "restic", "backup" ] 
     cmd.extend(includes)
+    cmd.extend(["--repo", repo])
     for tag in tags:
       cmd.extend(["--tag", tag])
     for exclude in excludes:
       cmd.extend(["--exclude", exclude])
 
+    os.environ["RESTIC_PASSWORD"] = password
     run.required(' '.join(cmd))
+    del os.environ["RESTIC_PASSWORD"]
 
-  def forget(tags,retention):
+  def forget(repo,password,tags,retention):
     cmd = ["restic", "forget"]
     cmd.extend(retention)
     cmd.extend(["--group-by", "host"])
+    cmd.extend(["--repo", repo])
     for tag in tags:
       cmd.extend(["--tag", tag])
 
+    os.environ["RESTIC_PASSWORD"] = password
     run.required(' '.join(cmd))
+    del os.environ["RESTIC_PASSWORD"]
 
 ###
 ### main
@@ -103,15 +115,22 @@ match options.mode:
   case "backup":
     logger.info('Starting Backup')
 
-    restic.export(cfg["repos"][cfg["backups"][args[0]]["repo"]]["vars"])
-    restic.init()
+    restic.export(cfg["repos"][cfg["backups"][args[0]]["repo"]].get("env", {}))
+    restic.init(
+      repo=cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
+      password=cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"]
+    )
     run.required(cfg["backups"][args[0]]["scripts"].get("pre"))
     restic.backup(
+      repo=cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
+      password=cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
       tags=[ "restless/" + args[0] ],
       includes=cfg["backups"][args[0]]["include"],
       excludes=cfg["backups"][args[0]]["exclude"]
     )
     restic.forget(
+      repo=cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
+      password=cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
       tags=[ "restless/" + args[0] ],
       retention=cfg["backups"][args[0]]["retention"]
     )
