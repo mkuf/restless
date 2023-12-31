@@ -39,67 +39,63 @@ ch.setFormatter(formatter)
 logger.addHandler(fh)
 logger.addHandler(ch)
 
-def runProcess(cmd):
-  process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-  stdout, stderr = process.communicate()
+class run():
+  def normal(cmd):
+    logger.debug( "running command:\n +" + cmd )
 
-  logger.debug( "cmd:\n+ " + cmd )
-  logger.debug( "out:\n" + stdout.decode('utf-8') )
+    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    stdout, stderr = process.communicate()
 
-  if process.returncode != 0:
-    logger.error(f"Failure during {cmd} :\n{stdout.decode('utf-8')}")
-    raise Exception(stdout.decode('utf-8'))
+    logger.debug( "out:\n" + stdout.decode('utf-8') )
 
-def runScript(backup,stage):
-  try:
-    cmd = cfg["backups"][backup]["scripts"][stage]
-    try:
-      logger.info("Running " + stage + " script for " + backup)
-      runProcess(cmd)
-    except:
-      notifications.notify(title="restless: error", body=stage + " Script for " + backup + " failed.")
-      sys.exit(1)
-  except KeyError:
-    logger.debug("No " + stage + " script set for " + backup)
+    if process.returncode != 0:
+      logger.error(f"Failure during {cmd} :\n{stdout.decode('utf-8')}")
+      raise Exception(stdout.decode('utf-8'))
+
+  def required(cmd):
+    if cmd:
+      try:
+        run.normal(cmd)
+      except Exception as e:
+        notifications.notify(title="restless: error", body=f"Error while running {cmd}:\n\n{str(e)}")
+        sys.exit(1)
+    else:
+      logger.debug("no cmd given, skipping execution")
 
 class restic():
-  def export(repo):
-    for key,value in cfg["repos"][repo]["vars"].items():
+  def export(vars):
+    logger.debug(vars)
+    for key,value in vars.items():
       logger.debug(key + "=" + value)
       os.environ[key]=value
 
   def init():
     try:
-      runProcess("restic init")
+      run.normal("restic init")
     except Exception as e:
       if not str("already exists") in str(e):
         notifications.notify(title="restless: error during init", body=str(e))
+        sys.exit(1)
         raise e
-  
-  def backup(backupname):
+
+  def backup(tags,includes,excludes):
     cmd = [ "restic", "backup" ] 
-    cmd.extend(cfg["backups"][backupname]["include"])
-    cmd.extend(["--tag", "restless/" + args[0]])
-    for exclude in cfg["backups"][backupname]["exclude"]:
+    cmd.extend(includes)
+    for tag in tags:
+      cmd.extend(["--tag", tag])
+    for exclude in excludes:
       cmd.extend(["--exclude", exclude])
 
-    try:
-      runProcess(' '.join(cmd))
-    except Exception as e:
-      notifications.notify(title="restless: error during backup", body=str(e))
-      sys.exit(1)
+    run.required(' '.join(cmd))
 
-  def forget(backupname):
+  def forget(tags,retention):
     cmd = ["restic", "forget"]
-    cmd.extend(cfg["backups"][args[0]]["retention"])
-    cmd.extend(["--tag", "restless/" + args[0]])
+    cmd.extend(retention)
     cmd.extend(["--group-by", "host"])
+    for tag in tags:
+      cmd.extend(["--tag", tag])
 
-    try:
-      runProcess(' '.join(cmd))
-    except Exception as e:
-      notifications.notify(title="restless: error during forget", body=str(e))
-      sys.exit(1)
+    run.required(' '.join(cmd))
 
 ###
 ### main
@@ -107,13 +103,19 @@ match options.mode:
   case "backup":
     logger.info('Starting Backup')
 
-    # Export variables and run init
-    restic.export(cfg["backups"][args[0]]["repo"])
+    restic.export(cfg["repos"][cfg["backups"][args[0]]["repo"]]["vars"])
     restic.init()
-    runScript(backup=args[0],stage="pre")
-    restic.backup(args[0])
-    restic.forget(args[0])
-    runScript(backup=args[0],stage="post")
+    run.required(cfg["backups"][args[0]]["scripts"].get("pre"))
+    restic.backup(
+      tags=[ "restless/" + args[0] ],
+      includes=cfg["backups"][args[0]]["include"],
+      excludes=cfg["backups"][args[0]]["exclude"]
+    )
+    restic.forget(
+      tags=[ "restless/" + args[0] ],
+      retention=cfg["backups"][args[0]]["retention"]
+    )
+    run.required(cfg["backups"][args[0]]["scripts"].get("post"))
 
   case "replica":
     logger.info('Starting Replication')
