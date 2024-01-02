@@ -200,12 +200,12 @@ match options.mode:
   case "backup":
     logger.info('Starting Backup')
 
+    run.required(cfg["backups"][args[0]].get("scripts",{}).get("pre"))
     restic.export(cfg["repos"][cfg["backups"][args[0]]["repo"]].get("env", {}))
     restic.init(
       repo=cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
       password=cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"]
     )
-    run.required(cfg["backups"][args[0]].get("scripts",{}).get("pre"))
     restic.backup(
       repo=cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
       password=cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
