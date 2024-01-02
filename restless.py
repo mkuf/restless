@@ -13,10 +13,20 @@ import subprocess
 ### setup
 
 # Parse arguments
-opts = optparse.OptionParser()
-opts.add_option("-c", "--config", dest="configfile", default="restless.yaml")
-opts.add_option("-m", "--mode", dest="mode", default="backup")
+usage = "%prog [options] <backupname|replicaname>"
+opts = optparse.OptionParser(usage)
+opts.add_option("-c", "--config",
+                dest="configfile",
+                default="restless.yaml",
+                help="Path to config file. Default: ./restless.yaml")
+opts.add_option("-m", "--mode",
+                dest="mode",
+                default="backup",
+                help="Execution Mode. Either 'backup' or 'replication'. Default: backup")
 (options, args) = opts.parse_args()
+
+if len(args) != 1:
+  opts.error("Incorrect number of argumens")
 
 # Load Configfile
 with open(options.configfile, "r") as file:
@@ -42,6 +52,7 @@ logger.addHandler(ch)
 
 class run():
   def normal(cmd):
+    """Run a command"""
     logger.debug( "running command:\n+ " + cmd )
 
     process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -56,6 +67,7 @@ class run():
     return stdout
 
   def required(cmd):
+    """Run a command and send a notification if it fails"""
     if cmd:
       try:
         out = run.normal(cmd)
@@ -68,12 +80,23 @@ class run():
 
 class restic():
   def export(vars):
+    """Set environment Variables.
+
+    Keyword arguments:
+    vars -- dict of key value pairs that will be set as environment variables
+    """
     logger.debug(vars)
     for key,value in vars.items():
       logger.debug(key + "=" + value)
       os.environ[key]=value
 
   def init(repo,password):
+    """Initialize a restic Repository.
+
+    Keyword arguments:
+    repo -- value for RESTIC_REPOSITORY
+    password -- restic password for the repository
+    """
     try:
       cmd = ["restic", "init"]
       cmd.extend(["--repo", repo])
@@ -88,6 +111,14 @@ class restic():
         raise e
 
   def snapshots(repo,password,tags):
+    """List restic snapshots.
+    Returns a list of dicts.
+
+    Keyword arguments:
+    repo -- value for RESTIC_REPOSITORY
+    password -- restic password for the repository
+    tags -- list of tags for that snapshots should be retrieved
+    """
     cmd = ["restic", "snapshots"]
     cmd.extend(["--json"])
     cmd.extend(["--repo", repo])
@@ -100,6 +131,15 @@ class restic():
     return json.loads(out.decode('utf8'))
 
   def backup(repo,password,tags,includes,excludes):
+    """Create a backup.
+
+    Keyword arguments:
+    repo -- value for RESTIC_REPOSITORY
+    password -- restic password for the repository
+    tags -- list of tags for that snapshots should be retrieved
+    includes -- list of files and directories that should be included
+    excludes -- list of exclude patterns
+    """
     cmd = [ "restic", "backup" ] 
     cmd.extend(includes)
     cmd.extend(["--repo", repo])
@@ -112,6 +152,15 @@ class restic():
     run.required(' '.join(cmd))
 
   def copy(from_repo,from_repo_password,to_repo,to_repo_password,snapshots):
+    """Copy restic snapshots between repositories.
+
+    Keyword arguments:
+    from_repo -- value for RESTIC_REPOSITORY of the source repository
+    from_repo_password -- restic password for the source repository
+    to_repo -- value for RESTIC_REPOSITORY of the target repository
+    to_repo_password -- restic password for the target repository
+    snapshots -- list of snapshots that should be copied from source to target repo
+    """
     cmd = ["restic", "copy"]
     cmd.extend(["--from-repo", from_repo])
     cmd.extend(["--repo", to_repo])
@@ -123,13 +172,23 @@ class restic():
     })
     run.required(' '.join(cmd))
 
-  def forget(repo,password,tags,retention):
+  def forget(repo,password,tags,retention={},snapshots={}):
+    """Remove snapshots.
+
+    Keyword arguments:
+    repo -- value for RESTIC_REPOSITORY
+    password -- restic password for the repository
+    tags -- list of tags for that snapshots should be retrieved
+    retention -- list of keep options to apply during restic forget
+    snapshots -- list of snapshots to remove
+    """
     cmd = ["restic", "forget"]
     cmd.extend(retention)
     cmd.extend(["--group-by", "host"])
     cmd.extend(["--repo", repo])
     for tag in tags:
       cmd.extend(["--tag", tag])
+    cmd.extend(snapshots)
 
     restic.export({"RESTIC_PASSWORD": password})
     run.required(' '.join(cmd))
@@ -146,7 +205,7 @@ match options.mode:
       repo=cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
       password=cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"]
     )
-    run.required(cfg["backups"][args[0]]["scripts"].get("pre"))
+    run.required(cfg["backups"][args[0]].get("scripts",{}).get("pre"))
     restic.backup(
       repo=cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
       password=cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
@@ -160,7 +219,7 @@ match options.mode:
       tags=[ "restless/" + args[0] ],
       retention=cfg["backups"][args[0]]["retention"]
     )
-    run.required(cfg["backups"][args[0]]["scripts"].get("post"))
+    run.required(cfg["backups"][args[0]].get("scripts",{}).get("post"))
 
   case "replication":
     logger.info('Starting Replication')
