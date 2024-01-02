@@ -211,7 +211,7 @@ match options.mode:
       password=cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
       tags=[ "restless/" + args[0] ],
       includes=cfg["backups"][args[0]]["include"],
-      excludes=cfg["backups"][args[0]]["exclude"]
+      excludes=cfg["backups"][args[0]].get("exclude",[])
     )
     restic.forget(
       repo=cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
