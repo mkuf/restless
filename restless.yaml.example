@@ -1,0 +1,79 @@
+## Restic repositories
+## Each key stores the repository as well as the password
+## Additional environment variables may be defined in the env dict
+repos:
+  local:
+    repository: "/data/restless"
+    password: "supersecurepassword"
+  offsite:
+    repository: "b2:mybackblazebucket"
+    password: "ultrasecurepassword"
+    env:
+      B2_ACCOUNT_ID: "myb2accountid"
+      B2_ACCOUNT_KEY: "myb2accountkey"
+
+## Apprise notification url
+## See https://github.com/caronc/apprise?tab=readme-ov-file#productivity-based-notifications 
+## for supported services
+notifications:
+  url: pover://user@token
+
+## Set log level and log loction
+log:
+  level: info
+  location: /var/log/restless.log
+
+## Backup definitions
+## Key sets the name that has to be used when calling restless in backup mode
+backups:
+  daily:
+    # Name of the repository to use, must match repository defined in .repos
+    repo: local
+    # List of keep-options to be passed to restic forget
+    retention:
+      - --keep-last 14
+    # List of files and directories to include during restic backup
+    include:
+      - /home/markus/manifests
+      - /home/markus/restless
+    # List of exclude patterns that get applied at restic backup
+    exclude:
+      - .cache
+      - .vscode-server
+    # Scripts to run pre or post backup
+    scripts:
+      pre: |
+        mount -o remount,rw /data/restless
+      post: |
+        mount -o remount,ro /data/restless
+  weekly:
+    repo: local
+    retention:
+      - --keep-last 4
+    include:
+      - /home/markus/compose
+    exclude:
+      - .cache
+      - .vscode-server
+
+## Backup definitions
+## Key sets the name that has to be used when calling restless in replication mode
+replication:
+  weekly:
+    # Name of the repository from which snapshots should be copied
+    from: local
+    # Name of the repository to which snapshots should be copied
+    to: offsite
+    # List of backups to sync between repos
+    include:
+        # name of the backup from .backups to sync
+      - backup: daily
+        # number of most recent snapshots to sync
+        syncLast: 1
+        # List of keep-options to be passed to restic forget
+        retention:
+        - --keep-last 12
+      - backup: weekly
+        syncLast: 1
+        retention:
+        - --keep-last 12
