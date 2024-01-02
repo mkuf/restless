@@ -3,6 +3,7 @@
 import os
 import sys
 import yaml
+import json
 import logging
 import apprise
 import optparse
@@ -46,16 +47,19 @@ class run():
     process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout, stderr = process.communicate()
 
-    logger.debug( "out:\n" + stdout.decode('utf-8') )
+    logger.info( "out:\n" + stdout.decode('utf-8') )
 
     if process.returncode != 0:
       logger.error(f"Failure during {cmd} :\n{stdout.decode('utf-8')}")
       raise Exception(stdout.decode('utf-8'))
 
+    return stdout
+
   def required(cmd):
     if cmd:
       try:
-        run.normal(cmd)
+        out = run.normal(cmd)
+        return out
       except Exception as e:
         notifications.notify(title="restless: error", body=f"Error while running {cmd}:\n\n{str(e)}")
         sys.exit(1)
@@ -74,15 +78,26 @@ class restic():
       cmd = ["restic", "init"]
       cmd.extend(["--repo", repo])
 
-      os.environ["RESTIC_PASSWORD"] = password
+      restic.export({"RESTIC_PASSWORD": password})
       run.normal(' '.join(cmd))
-      del os.environ["RESTIC_PASSWORD"]
-
     except Exception as e:
-      if not str("already exists") in str(e):
+      if str("already exists") in str(e):
+        logger.info("Repo already initialized.")
+      else:
         notifications.notify(title="restless: error during init", body=str(e))
-        sys.exit(1)
         raise e
+
+  def snapshots(repo,password,tags):
+    cmd = ["restic", "snapshots"]
+    cmd.extend(["--json"])
+    cmd.extend(["--repo", repo])
+    for tag in tags:
+      cmd.extend(["--tag", tag])
+
+    restic.export({"RESTIC_PASSWORD": password})
+    out = run.required(' '.join(cmd))
+
+    return json.loads(out.decode('utf8'))
 
   def backup(repo,password,tags,includes,excludes):
     cmd = [ "restic", "backup" ] 
@@ -93,9 +108,20 @@ class restic():
     for exclude in excludes:
       cmd.extend(["--exclude", exclude])
 
-    os.environ["RESTIC_PASSWORD"] = password
+    restic.export({"RESTIC_PASSWORD": password})
     run.required(' '.join(cmd))
-    del os.environ["RESTIC_PASSWORD"]
+
+  def copy(from_repo,from_repo_password,to_repo,to_repo_password,snapshots):
+    cmd = ["restic", "copy"]
+    cmd.extend(["--from-repo", from_repo])
+    cmd.extend(["--repo", to_repo])
+    cmd.extend(snapshots)
+
+    restic.export({
+      "RESTIC_FROM_PASSWORD": from_repo_password,
+      "RESTIC_PASSWORD": to_repo_password
+    })
+    run.required(' '.join(cmd))
 
   def forget(repo,password,tags,retention):
     cmd = ["restic", "forget"]
@@ -105,9 +131,9 @@ class restic():
     for tag in tags:
       cmd.extend(["--tag", tag])
 
-    os.environ["RESTIC_PASSWORD"] = password
+    restic.export({"RESTIC_PASSWORD": password})
     run.required(' '.join(cmd))
-    del os.environ["RESTIC_PASSWORD"]
+
 
 ###
 ### main
@@ -136,8 +162,52 @@ match options.mode:
     )
     run.required(cfg["backups"][args[0]]["scripts"].get("post"))
 
-  case "replica":
+  case "replication":
     logger.info('Starting Replication')
+
+    ## Prep Source
+    restic.export(cfg["repos"][cfg["replication"][args[0]]["from"]].get("env", {}))
+    restic.init(
+      repo=cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
+      password=cfg["repos"][cfg["replication"][args[0]]["from"]]["password"]
+    )
+
+    ## Build list of snapshots to copy from source
+    snaps_to_sync = list()
+    for include in cfg["replication"][args[0]]["include"]:
+      snaps = restic.snapshots(
+        repo=cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
+        password=cfg["repos"][cfg["replication"][args[0]]["from"]]["password"],
+        tags=["restless/" + include["backup"] ]
+      )
+      logger.debug(str(snaps))
+
+      for i in range(1,include["syncLast"]+1):
+        snaps_to_sync.append(snaps[-abs(i)]["short_id"])
+    logger.info("Snaps to sync: " + str(snaps_to_sync))
+
+    ## Copy Snapshots
+    restic.export({} | cfg["repos"][cfg["replication"][args[0]]["from"]].get("env",{}) | cfg["repos"][cfg["replication"][args[0]]["to"]].get("env",{}))
+    restic.init(
+      repo=cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
+      password=cfg["repos"][cfg["replication"][args[0]]["to"]]["password"]
+    )
+    restic.copy(
+      from_repo=cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
+      from_repo_password=cfg["repos"][cfg["replication"][args[0]]["from"]]["password"],
+      to_repo=cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
+      to_repo_password=cfg["repos"][cfg["replication"][args[0]]["to"]]["password"],
+      snapshots=snaps_to_sync
+    )
+
+    for include in cfg["replication"][args[0]]["include"]:
+      restic.forget(
+        repo=cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
+        password=cfg["repos"][cfg["replication"][args[0]]["to"]]["password"],
+        tags=[ "restless/" + include["backup"] ],
+        retention=include["retention"]
+      )
+
   case _:
     logger.critical("Mode " + options.mode + " not supported")
     notifications.notify(title="restless: critical error", body="Unsupported Mode has been requested.")
