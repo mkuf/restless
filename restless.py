@@ -184,6 +184,7 @@ class restic():
     """
     cmd = ["restic", "forget"]
     cmd.extend(retention)
+    cmd.extend(["--prune"])
     cmd.extend(["--group-by", "host"])
     cmd.extend(["--repo", repo])
     for tag in tags:
@@ -192,7 +193,6 @@ class restic():
 
     restic.export({"RESTIC_PASSWORD": password})
     run.required(' '.join(cmd))
-
 
 ###
 ### main
