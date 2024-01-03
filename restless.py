@@ -106,7 +106,7 @@ class restic():
       restic.export({"RESTIC_PASSWORD": password})
       run.normal(' '.join(cmd))
     except Exception as e:
-      if str("already exists") in str(e):
+      if str("already exists") or str("already initialized") in str(e):
         logger.info("Repo already initialized.")
       else:
         notifications.notify(title="restless: error during init", body=str(e))
