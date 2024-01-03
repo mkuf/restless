@@ -112,27 +112,26 @@ class restic():
         notifications.notify(title="restless: error during init", body=str(e))
         raise e
 
-  def snapshots(repo,password,tags):
+  def snapshots(repo,password,options=[]):
     """List restic snapshots.
     Returns a list of dicts.
 
     Keyword arguments:
     repo -- value for RESTIC_REPOSITORY
     password -- restic password for the repository
-    tags -- list of tags for that snapshots should be retrieved
+    options -- list of options that should be applied when getting snapshots
     """
     cmd = ["restic", "snapshots"]
     cmd.extend(["--json"])
     cmd.extend(["--repo", repo])
-    for tag in tags:
-      cmd.extend(["--tag", tag])
+    cmd.extend(options)
 
     restic.export({"RESTIC_PASSWORD": password})
     out = run.required(' '.join(cmd))
 
     return json.loads(out)
 
-  def backup(repo,password,tags,includes,excludes):
+  def backup(repo,password,includes,options=[]):
     """Create a backup.
 
     Keyword arguments:
@@ -140,21 +139,18 @@ class restic():
     password -- restic password for the repository
     tags -- list of tags for that snapshots should be retrieved
     includes -- list of files and directories that should be included
-    excludes -- list of exclude patterns
+    options -- list of options that should be applied during backup
     """
     cmd = [ "restic", "backup" ] 
-    cmd.extend(includes)
     cmd.extend(["--verbose=2"])
     cmd.extend(["--repo", repo])
-    for tag in tags:
-      cmd.extend(["--tag", tag])
-    for exclude in excludes:
-      cmd.extend(["--exclude", exclude])
+    cmd.extend(options)
+    cmd.extend(includes)
 
     restic.export({"RESTIC_PASSWORD": password})
     run.required(' '.join(cmd))
 
-  def copy(from_repo,from_repo_password,to_repo,to_repo_password,snapshots):
+  def copy(from_repo,from_repo_password,to_repo,to_repo_password,options=[],snapshots=[]):
     """Copy restic snapshots between repositories.
 
     Keyword arguments:
@@ -162,11 +158,13 @@ class restic():
     from_repo_password -- restic password for the source repository
     to_repo -- value for RESTIC_REPOSITORY of the target repository
     to_repo_password -- restic password for the target repository
+    options -- list of options to apply when copying
     snapshots -- list of snapshots that should be copied from source to target repo
     """
     cmd = ["restic", "copy"]
     cmd.extend(["--from-repo", from_repo])
     cmd.extend(["--repo", to_repo])
+    cmd.extend(options)
     cmd.extend(snapshots)
 
     restic.export({
@@ -175,23 +173,21 @@ class restic():
     })
     run.required(' '.join(cmd))
 
-  def forget(repo,password,tags,retention={},snapshots={}):
+  def forget(repo,password,snapshots=[],options=[]):
     """Remove snapshots.
 
     Keyword arguments:
     repo -- value for RESTIC_REPOSITORY
     password -- restic password for the repository
     tags -- list of tags for that snapshots should be retrieved
-    retention -- list of keep options to apply during restic forget
+    options -- list of options to apply during restic forget
     snapshots -- list of snapshots to remove
     """
     cmd = ["restic", "forget"]
-    cmd.extend(retention)
     cmd.extend(["--prune"])
     cmd.extend(["--group-by", "host"])
     cmd.extend(["--repo", repo])
-    for tag in tags:
-      cmd.extend(["--tag", tag])
+    cmd.extend(options)
     cmd.extend(snapshots)
 
     restic.export({"RESTIC_PASSWORD": password})
@@ -206,21 +202,25 @@ match options.mode:
     run.required(cfg["backups"][args[0]].get("scripts",{}).get("pre"))
     restic.export(cfg["repos"][cfg["backups"][args[0]]["repo"]].get("env", {}))
     restic.init(
-      repo=cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
-      password=cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"]
+      repo = cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
+      password = cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"]
     )
     restic.backup(
-      repo=cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
-      password=cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
-      tags=[ "restless/" + args[0] ],
-      includes=cfg["backups"][args[0]]["include"],
-      excludes=cfg["backups"][args[0]].get("exclude",[])
+      repo = cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
+      password = cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
+      includes = cfg["backups"][args[0]]["include"],
+      options = [
+        "--tag restless/" + args[0],
+        *["--exclude " + ex for ex in cfg["backups"][args[0]].get("exclude",[])]
+      ]
     )
     restic.forget(
-      repo=cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
-      password=cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
-      tags=[ "restless/" + args[0] ],
-      retention=cfg["backups"][args[0]]["retention"]
+      repo = cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
+      password = cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
+      options = [
+        "--tag restless/" + args[0],
+        *cfg["backups"][args[0]]["retention"]
+      ]
     )
     run.required(cfg["backups"][args[0]].get("scripts",{}).get("post"))
 
@@ -230,19 +230,20 @@ match options.mode:
     ## Prep Source
     restic.export(cfg["repos"][cfg["replication"][args[0]]["from"]].get("env", {}))
     restic.init(
-      repo=cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
-      password=cfg["repos"][cfg["replication"][args[0]]["from"]]["password"]
+      repo = cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
+      password = cfg["repos"][cfg["replication"][args[0]]["from"]]["password"]
     )
 
     ## Build list of snapshots to copy from source
     snaps_to_sync = list()
     for include in cfg["replication"][args[0]]["include"]:
       snaps = restic.snapshots(
-        repo=cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
-        password=cfg["repos"][cfg["replication"][args[0]]["from"]]["password"],
-        tags=["restless/" + include["backup"] ]
+        repo = cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
+        password = cfg["repos"][cfg["replication"][args[0]]["from"]]["password"],
+        options = [
+          "--tag restless/" + include["backup"]
+        ]
       )
-      logger.debug(str(snaps))
 
       for i in range(1,include["syncLast"]+1):
         snaps_to_sync.append(snaps[-abs(i)]["short_id"])
@@ -251,23 +252,25 @@ match options.mode:
     ## Copy Snapshots
     restic.export({} | cfg["repos"][cfg["replication"][args[0]]["from"]].get("env",{}) | cfg["repos"][cfg["replication"][args[0]]["to"]].get("env",{}))
     restic.init(
-      repo=cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
-      password=cfg["repos"][cfg["replication"][args[0]]["to"]]["password"]
+      repo = cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
+      password = cfg["repos"][cfg["replication"][args[0]]["to"]]["password"]
     )
     restic.copy(
-      from_repo=cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
-      from_repo_password=cfg["repos"][cfg["replication"][args[0]]["from"]]["password"],
-      to_repo=cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
-      to_repo_password=cfg["repos"][cfg["replication"][args[0]]["to"]]["password"],
-      snapshots=snaps_to_sync
+      from_repo = cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
+      from_repo_password = cfg["repos"][cfg["replication"][args[0]]["from"]]["password"],
+      to_repo = cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
+      to_repo_password = cfg["repos"][cfg["replication"][args[0]]["to"]]["password"],
+      snapshots = snaps_to_sync
     )
 
     for include in cfg["replication"][args[0]]["include"]:
       restic.forget(
-        repo=cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
-        password=cfg["repos"][cfg["replication"][args[0]]["to"]]["password"],
-        tags=[ "restless/" + include["backup"] ],
-        retention=include["retention"]
+        repo = cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
+        password = cfg["repos"][cfg["replication"][args[0]]["to"]]["password"],
+        options = [
+          "--tag restless/" + include["backup"],
+          *include["retention"]
+        ]
       )
 
   case _:
