@@ -53,16 +53,18 @@ logger.addHandler(ch)
 class run():
   def normal(cmd):
     """Run a command"""
-    logger.debug( "running command:\n+ " + cmd )
+    logger.info( "running command: " + cmd )
 
+    stdout = str()
     process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    stdout, stderr = process.communicate()
-
-    logger.info( "out:\n" + stdout.decode('utf-8') )
+    while process.poll() == None:
+      line = process.stdout.readline().decode("utf-8")
+      logger.info("command output: " + line.strip())
+      stdout += line
 
     if process.returncode != 0:
-      logger.error(f"Failure during {cmd} :\n{stdout.decode('utf-8')}")
-      raise Exception(stdout.decode('utf-8'))
+      logger.error(f"Failure during {cmd} :\n{stdout}")
+      raise Exception(stdout)
 
     return stdout
 
@@ -128,7 +130,7 @@ class restic():
     restic.export({"RESTIC_PASSWORD": password})
     out = run.required(' '.join(cmd))
 
-    return json.loads(out.decode('utf8'))
+    return json.loads(out)
 
   def backup(repo,password,tags,includes,excludes):
     """Create a backup.
@@ -142,6 +144,7 @@ class restic():
     """
     cmd = [ "restic", "backup" ] 
     cmd.extend(includes)
+    cmd.extend(["--verbose=2"])
     cmd.extend(["--repo", repo])
     for tag in tags:
       cmd.extend(["--tag", tag])
