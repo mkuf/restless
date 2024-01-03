@@ -197,7 +197,7 @@ class restic():
 ### main
 match options.mode:
   case "backup":
-    logger.info('Starting Backup')
+    logger.info("Starting Backup " + args[0])
 
     run.required(cfg["backups"][args[0]].get("scripts",{}).get("pre"))
     restic.export(cfg["repos"][cfg["backups"][args[0]]["repo"]].get("env", {}))
@@ -225,7 +225,7 @@ match options.mode:
     run.required(cfg["backups"][args[0]].get("scripts",{}).get("post"))
 
   case "replication":
-    logger.info('Starting Replication')
+    logger.info("Starting Replication " + args[0])
 
     ## Prep Source
     restic.export(cfg["repos"][cfg["replication"][args[0]]["from"]].get("env", {}))
