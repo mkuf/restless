@@ -227,6 +227,8 @@ match options.mode:
   case "replication":
     logger.info("Starting Replication " + args[0])
 
+    run.required(cfg["replication"][args[0]].get("scripts",{}).get("pre"))
+
     ## Prep Source
     restic.export(cfg["repos"][cfg["replication"][args[0]]["from"]].get("env", {}))
     restic.init(
@@ -272,6 +274,8 @@ match options.mode:
           *include["retention"]
         ]
       )
+
+    run.required(cfg["replication"][args[0]].get("scripts",{}).get("post"))
 
   case _:
     logger.critical("Mode " + options.mode + " not supported")

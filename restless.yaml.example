@@ -77,3 +77,8 @@ replication:
         syncLast: 1
         retention:
         - --keep-last 12
+    scripts:
+      pre: |
+        echo "This will run before any restic operations"
+      post: |
+        echo "This will run after all restic operations"

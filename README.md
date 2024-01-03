@@ -107,6 +107,8 @@ Each key in the `.replication` map defines the name for a job that has to be spe
 |`.include[*].backup`|Name of the backup from which snapshots should be synced. Backup Must be located in the `from`-Repository|String|`''`|Yes|
 |`.include[*].syncLast`|Nuber of snapshots to sync, starting at the most recent snapshot|Int|`None`|Yes|
 |`.include[*].retention`|List of Keep-Arguments passed to restic. Used when calling `restic forget`. See [Restic Docs](https://restic.readthedocs.io/en/latest/060_forget.html#removing-snapshots-according-to-a-policy) for Reference|List|`[]`|Yes|
+|`.scripts.pre`|Script to run before replication|String|`''`|No|
+|`.scripts.post`|Script to run after replication|String|`''`|No|
 
 #### Example
 ```yaml
@@ -123,6 +125,11 @@ replication:
         syncLast: 4
         retention:
         - --keep-last 12
+    scripts:
+      pre: |
+        echo "This will run before any restic operations"
+      post: |
+        echo "This will run after all restic operations"
 ```
 
 ## Run
