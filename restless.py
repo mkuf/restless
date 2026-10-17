@@ -186,8 +186,8 @@ match options.mode:
       includes = cfg["backups"][args[0]]["include"],
       options = [
         "--tag restless/" + args[0],
-        *["--exclude " + ex for ex in cfg["backups"][args[0]].get("exclude",[])]
-        *cfg["backups"][args[0]]["flags"]["global"]
+        *["--exclude " + ex for ex in cfg["backups"][args[0]].get("exclude",[])],
+        *cfg["backups"][args[0]]["flags"]["global"],
         *cfg["backups"][args[0]]["flags"]["backup"]
       ]
     )
@@ -196,8 +196,8 @@ match options.mode:
       password = cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
       options = [
         "--tag restless/" + args[0],
-        *cfg["backups"][args[0]]["retention"]
-        *cfg["backups"][args[0]]["flags"]["global"]
+        *cfg["backups"][args[0]]["retention"],
+        *cfg["backups"][args[0]]["flags"]["global"],
         *cfg["backups"][args[0]]["flags"]["forget"]
       ]
     )
@@ -218,8 +218,8 @@ match options.mode:
         repo = cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
         password = cfg["repos"][cfg["replication"][args[0]]["from"]]["password"],
         options = [
-          "--tag restless/" + include["backup"]
-          *cfg["backups"][args[0]]["flags"]["global"]
+          "--tag restless/" + include["backup"],
+          *cfg["replication"][args[0]]["flags"]["global"]
         ]
       )
 
@@ -246,8 +246,8 @@ match options.mode:
         password = cfg["repos"][cfg["replication"][args[0]]["to"]]["password"],
         options = [
           "--tag restless/" + include["backup"],
-          *include["retention"]
-          *cfg["replication"][args[0]]["flags"]["global"]
+          *include["retention"],
+          *cfg["replication"][args[0]]["flags"]["global"],
           *cfg["replication"][args[0]]["flags"]["forget"]
         ]
       )
