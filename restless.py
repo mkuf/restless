@@ -122,7 +122,6 @@ class restic():
     options -- list of options that should be applied during backup
     """
     cmd = [ "restic", "backup" ] 
-    cmd.extend(["--verbose=2"])
     cmd.extend(["--repo", repo])
     cmd.extend(options)
     cmd.extend(includes)
@@ -188,6 +187,8 @@ match options.mode:
       options = [
         "--tag restless/" + args[0],
         *["--exclude " + ex for ex in cfg["backups"][args[0]].get("exclude",[])]
+        *cfg["backups"][args[0]]["flags"]["global"]
+        *cfg["backups"][args[0]]["flags"]["backup"]
       ]
     )
     restic.forget(
@@ -196,6 +197,8 @@ match options.mode:
       options = [
         "--tag restless/" + args[0],
         *cfg["backups"][args[0]]["retention"]
+        *cfg["backups"][args[0]]["flags"]["global"]
+        *cfg["backups"][args[0]]["flags"]["forget"]
       ]
     )
     run.required(cfg["backups"][args[0]].get("scripts",{}).get("post"))
@@ -216,6 +219,7 @@ match options.mode:
         password = cfg["repos"][cfg["replication"][args[0]]["from"]]["password"],
         options = [
           "--tag restless/" + include["backup"]
+          *cfg["backups"][args[0]]["flags"]["global"]
         ]
       )
 
@@ -231,6 +235,9 @@ match options.mode:
       to_repo = cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
       to_repo_password = cfg["repos"][cfg["replication"][args[0]]["to"]]["password"],
       snapshots = snaps_to_sync
+      options = [
+        *cfg["replication"][args[0]]["flags"]["global"]
+      ]
     )
 
     for include in cfg["replication"][args[0]]["include"]:
@@ -240,6 +247,8 @@ match options.mode:
         options = [
           "--tag restless/" + include["backup"],
           *include["retention"]
+          *cfg["replication"][args[0]]["flags"]["global"]
+          *cfg["replication"][args[0]]["flags"]["forget"]
         ]
       )
 

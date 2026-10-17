@@ -40,6 +40,13 @@ backups:
     exclude:
       - .cache
       - .vscode-server
+    flags:
+      global:
+        - --verbose
+      backup:
+        - --one-file-system
+      forget:
+        - --repack-small
     # Scripts to run pre or post backup
     scripts:
       pre: |
@@ -77,6 +84,11 @@ replication:
         syncLast: 1
         retention:
         - --keep-last 12
+    flags:
+      global:
+        - --verbose
+      forget:
+        - --repack-small
     scripts:
       pre: |
         echo "This will run before any restic operations"

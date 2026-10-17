@@ -70,6 +70,9 @@ Each key in the `.backups` map defines the name for a job that has to be specifi
 |`.retention`|List of Keep-Arguments passed to restic. Used when calling `restic forget`. See [Restic Docs](https://restic.readthedocs.io/en/latest/060_forget.html#removing-snapshots-according-to-a-policy) for Reference|List|`[]`|Yes|
 |`.include`|List of Files and Directories that should be included when creating a backup|List|`[]`|Yes|
 |`.exclude`|List of exclude patterns that should be applied when creating a backup|List|`[]`|No|
+|`.flags.global`|Flags that get appended to all restic commands|List|`[]`|No|
+|`.flags.backup`|Flags that get appended to the restic backup command|List|`[]`|No|
+|`.flags.forget`|Flags that get appended to the restic forget command|List|`[]`|No|
 |`.scripts.pre`|Script to run before creating a Backup|String|`''`|No|
 |`.scripts.post`|Script to run after a Backup has been created and `restic forget` has been executed|String|`''`|No|
 
@@ -87,6 +90,13 @@ backups:
     - /root
     exclude:
     - .cache
+    flags:
+      global:
+        - --verbose
+      backup:
+        - --one-file-system
+      forget:
+        - --repack-small
     scripts:
       pre: |
         echo "Mounting Repository disk Writable"
@@ -107,6 +117,8 @@ Each key in the `.replication` map defines the name for a job that has to be spe
 |`.include[*].backup`|Name of the backup from which snapshots should be synced. Backup Must be located in the `from`-Repository|String|`''`|Yes|
 |`.include[*].syncLast`|Nuber of snapshots to sync, starting at the most recent snapshot|Int|`None`|Yes|
 |`.include[*].retention`|List of Keep-Arguments passed to restic. Used when calling `restic forget`. See [Restic Docs](https://restic.readthedocs.io/en/latest/060_forget.html#removing-snapshots-according-to-a-policy) for Reference|List|`[]`|Yes|
+|`.flags.global`|Flags that get appended to all restic commands|List|`[]`|No|
+|`.flags.forget`|Flags that get appended to the restic forget command|List|`[]`|No|
 |`.scripts.pre`|Script to run before replication|String|`''`|No|
 |`.scripts.post`|Script to run after replication|String|`''`|No|
 
@@ -125,6 +137,11 @@ replication:
         syncLast: 4
         retention:
         - --keep-last 12
+    flags:
+      global:
+        - --verbose
+      forget:
+        - --repack-small
     scripts:
       pre: |
         echo "This will run before any restic operations"
