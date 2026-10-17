@@ -172,6 +172,10 @@ class restic():
     restic.export({"RESTIC_PASSWORD": password})
     run.required(' '.join(cmd))
 
+def get_flags(section: dict, kind: str) -> list:
+  """Return flags[kind] from a backup/replication section, or [] if missing."""
+  return (section.get("flags") or {}).get(kind) or []
+
 ###
 ### main
 match options.mode:
@@ -189,8 +193,8 @@ match options.mode:
       options = [
         "--tag restless/" + args[0],
         *["--exclude " + ex for ex in backup_cfg.get("exclude",[])],
-        *backup_cfg["flags"]["global"],
-        *backup_cfg["flags"]["backup"]
+        *get_flags(backup_cfg, "global"),
+        *get_flags(backup_cfg, "backup")
       ]
     )
     restic.forget(
@@ -199,8 +203,8 @@ match options.mode:
       options = [
         "--tag restless/" + args[0],
         *backup_cfg["retention"],
-        *backup_cfg["flags"]["global"],
-        *backup_cfg["flags"]["forget"]
+        *get_flags(backup_cfg, "global"),
+        *get_flags(backup_cfg, "forget")
       ]
     )
     run.required(backup_cfg.get("scripts",{}).get("post"))
@@ -223,7 +227,7 @@ match options.mode:
         password = cfg["repos"][replication_cfg["from"]]["password"],
         options = [
           "--tag restless/" + include["backup"],
-          *replication_cfg["flags"]["global"]
+          *get_flags(replication_cfg, "global")
         ]
       )
 
@@ -240,7 +244,7 @@ match options.mode:
       to_repo_password = cfg["repos"][replication_cfg["to"]]["password"],
       snapshots = snaps_to_sync,
       options = [
-        *replication_cfg["flags"]["global"]
+        *get_flags(replication_cfg, "global")
       ]
     )
 
@@ -251,8 +255,8 @@ match options.mode:
         options = [
           "--tag restless/" + include["backup"],
           *include["retention"],
-          *replication_cfg["flags"]["global"],
-          *replication_cfg["flags"]["forget"]
+          *get_flags(replication_cfg, "global"),
+          *get_flags(replication_cfg, "forget")
         ]
       )
 
