@@ -234,7 +234,7 @@ match options.mode:
       from_repo_password = cfg["repos"][cfg["replication"][args[0]]["from"]]["password"],
       to_repo = cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
       to_repo_password = cfg["repos"][cfg["replication"][args[0]]["to"]]["password"],
-      snapshots = snaps_to_sync
+      snapshots = snaps_to_sync,
       options = [
         *cfg["replication"][args[0]]["flags"]["global"]
       ]
