@@ -92,26 +92,6 @@ class restic():
       logger.debug(key + "=" + value)
       os.environ[key]=value
 
-  def init(repo,password):
-    """Initialize a restic Repository.
-
-    Keyword arguments:
-    repo -- value for RESTIC_REPOSITORY
-    password -- restic password for the repository
-    """
-    try:
-      cmd = ["restic", "init"]
-      cmd.extend(["--repo", repo])
-
-      restic.export({"RESTIC_PASSWORD": password})
-      run.normal(' '.join(cmd))
-    except Exception as e:
-      if str("already exists") or str("already initialized") in str(e):
-        logger.info("Repo already initialized.")
-      else:
-        notifications.notify(title="restless: error during init", body=str(e))
-        raise e
-
   def snapshots(repo,password,options=[]):
     """List restic snapshots.
     Returns a list of dicts.
@@ -201,10 +181,6 @@ match options.mode:
 
     run.required(cfg["backups"][args[0]].get("scripts",{}).get("pre"))
     restic.export(cfg["repos"][cfg["backups"][args[0]]["repo"]].get("env", {}))
-    restic.init(
-      repo = cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
-      password = cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"]
-    )
     restic.backup(
       repo = cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
       password = cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
@@ -231,10 +207,6 @@ match options.mode:
 
     ## Prep Source
     restic.export(cfg["repos"][cfg["replication"][args[0]]["from"]].get("env", {}))
-    restic.init(
-      repo = cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
-      password = cfg["repos"][cfg["replication"][args[0]]["from"]]["password"]
-    )
 
     ## Build list of snapshots to copy from source
     snaps_to_sync = list()
@@ -253,10 +225,6 @@ match options.mode:
 
     ## Copy Snapshots
     restic.export({} | cfg["repos"][cfg["replication"][args[0]]["from"]].get("env",{}) | cfg["repos"][cfg["replication"][args[0]]["to"]].get("env",{}))
-    restic.init(
-      repo = cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
-      password = cfg["repos"][cfg["replication"][args[0]]["to"]]["password"]
-    )
     restic.copy(
       from_repo = cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
       from_repo_password = cfg["repos"][cfg["replication"][args[0]]["from"]]["password"],
