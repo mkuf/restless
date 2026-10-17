@@ -178,48 +178,52 @@ match options.mode:
   case "backup":
     logger.info("Starting Backup " + args[0])
 
-    run.required(cfg["backups"][args[0]].get("scripts",{}).get("pre"))
-    restic.export(cfg["repos"][cfg["backups"][args[0]]["repo"]].get("env", {}))
+    backup_cfg = cfg["backups"][args[0]]
+
+    run.required(backup_cfg.get("scripts",{}).get("pre"))
+    restic.export(cfg["repos"][backup_cfg["repo"]].get("env", {}))
     restic.backup(
-      repo = cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
-      password = cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
-      includes = cfg["backups"][args[0]]["include"],
+      repo = cfg["repos"][backup_cfg["repo"]]["repository"],
+      password = cfg["repos"][backup_cfg["repo"]]["password"],
+      includes = backup_cfg["include"],
       options = [
         "--tag restless/" + args[0],
-        *["--exclude " + ex for ex in cfg["backups"][args[0]].get("exclude",[])],
-        *cfg["backups"][args[0]]["flags"]["global"],
-        *cfg["backups"][args[0]]["flags"]["backup"]
+        *["--exclude " + ex for ex in backup_cfg.get("exclude",[])],
+        *backup_cfg["flags"]["global"],
+        *backup_cfg["flags"]["backup"]
       ]
     )
     restic.forget(
-      repo = cfg["repos"][cfg["backups"][args[0]]["repo"]]["repository"],
-      password = cfg["repos"][cfg["backups"][args[0]]["repo"]]["password"],
+      repo = cfg["repos"][backup_cfg["repo"]]["repository"],
+      password = cfg["repos"][backup_cfg["repo"]]["password"],
       options = [
         "--tag restless/" + args[0],
-        *cfg["backups"][args[0]]["retention"],
-        *cfg["backups"][args[0]]["flags"]["global"],
-        *cfg["backups"][args[0]]["flags"]["forget"]
+        *backup_cfg["retention"],
+        *backup_cfg["flags"]["global"],
+        *backup_cfg["flags"]["forget"]
       ]
     )
-    run.required(cfg["backups"][args[0]].get("scripts",{}).get("post"))
+    run.required(backup_cfg.get("scripts",{}).get("post"))
 
   case "replication":
     logger.info("Starting Replication " + args[0])
 
-    run.required(cfg["replication"][args[0]].get("scripts",{}).get("pre"))
+    replication_cfg = cfg["replication"][args[0]]
+
+    run.required(replication_cfg.get("scripts",{}).get("pre"))
 
     ## Prep Source
-    restic.export(cfg["repos"][cfg["replication"][args[0]]["from"]].get("env", {}))
+    restic.export(cfg["repos"][replication_cfg["from"]].get("env", {}))
 
     ## Build list of snapshots to copy from source
     snaps_to_sync = list()
-    for include in cfg["replication"][args[0]]["include"]:
+    for include in replication_cfg["include"]:
       snaps = restic.snapshots(
-        repo = cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
-        password = cfg["repos"][cfg["replication"][args[0]]["from"]]["password"],
+        repo = cfg["repos"][replication_cfg["from"]]["repository"],
+        password = cfg["repos"][replication_cfg["from"]]["password"],
         options = [
           "--tag restless/" + include["backup"],
-          *cfg["replication"][args[0]]["flags"]["global"]
+          *replication_cfg["flags"]["global"]
         ]
       )
 
@@ -228,31 +232,31 @@ match options.mode:
     logger.info("Snaps to sync: " + str(snaps_to_sync))
 
     ## Copy Snapshots
-    restic.export({} | cfg["repos"][cfg["replication"][args[0]]["from"]].get("env",{}) | cfg["repos"][cfg["replication"][args[0]]["to"]].get("env",{}))
+    restic.export({} | cfg["repos"][replication_cfg["from"]].get("env",{}) | cfg["repos"][replication_cfg["to"]].get("env",{}))
     restic.copy(
-      from_repo = cfg["repos"][cfg["replication"][args[0]]["from"]]["repository"],
-      from_repo_password = cfg["repos"][cfg["replication"][args[0]]["from"]]["password"],
-      to_repo = cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
-      to_repo_password = cfg["repos"][cfg["replication"][args[0]]["to"]]["password"],
+      from_repo = cfg["repos"][replication_cfg["from"]]["repository"],
+      from_repo_password = cfg["repos"][replication_cfg["from"]]["password"],
+      to_repo = cfg["repos"][replication_cfg["to"]]["repository"],
+      to_repo_password = cfg["repos"][replication_cfg["to"]]["password"],
       snapshots = snaps_to_sync,
       options = [
-        *cfg["replication"][args[0]]["flags"]["global"]
+        *replication_cfg["flags"]["global"]
       ]
     )
 
-    for include in cfg["replication"][args[0]]["include"]:
+    for include in replication_cfg["include"]:
       restic.forget(
-        repo = cfg["repos"][cfg["replication"][args[0]]["to"]]["repository"],
-        password = cfg["repos"][cfg["replication"][args[0]]["to"]]["password"],
+        repo = cfg["repos"][replication_cfg["to"]]["repository"],
+        password = cfg["repos"][replication_cfg["to"]]["password"],
         options = [
           "--tag restless/" + include["backup"],
           *include["retention"],
-          *cfg["replication"][args[0]]["flags"]["global"],
-          *cfg["replication"][args[0]]["flags"]["forget"]
+          *replication_cfg["flags"]["global"],
+          *replication_cfg["flags"]["forget"]
         ]
       )
 
-    run.required(cfg["replication"][args[0]].get("scripts",{}).get("post"))
+    run.required(replication_cfg.get("scripts",{}).get("post"))
 
   case _:
     logger.critical("Mode " + options.mode + " not supported")
